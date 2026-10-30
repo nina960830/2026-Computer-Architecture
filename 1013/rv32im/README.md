@@ -11,6 +11,7 @@ rd = floor((rs1 + rs2) / 2)      中間值需 33-bit，不得溢位
 | 檔案 | 內容 |
 |---|---|
 | `test_avg.S` | 四個純量實作 + 一個迴圈版 + 自我測試（Ripes 可直接載入） |
+| `test_avg_ci.S` | 同一組測資，改用 AVG 自訂指令（`avg rd, rs1, rs2`） |
 | `rv32im_sim.py` | 自製 RV32IM 組譯器 + 模擬器，用來量測指令數（本機無工具鏈） |
 | `counts.md` | 量測結果（靜態/動態指令數、分支數、每元素成本） |
 | `Makefile` | 實驗室工具鏈用（`make dump` 可看 objdump） |
@@ -40,11 +41,12 @@ rd = floor((rs1 + rs2) / 2)      中間值需 33-bit，不得溢位
 ## 在命令列執行（不需要 RISC-V 工具鏈）
 
 ```powershell
-python rv32im_sim.py test_avg.S --run --report   # 指令數總表
-python rv32im_sim.py test_avg.S --fuzz 300       # 300 組隨機/邊界差分測試
-python rv32im_sim.py test_avg.S --dump           # 機器碼 listing
+python rv32im_sim.py test_avg.S --run --report      # 指令數總表
+python rv32im_sim.py test_avg_ci.S --run --report   # 自訂指令版（CP3）
+python rv32im_sim.py test_avg.S --fuzz 300          # 300 組隨機/邊界差分測試
+python rv32im_sim.py test_avg.S --dump              # 機器碼 listing
 python rv32im_sim.py test_avg.S --func avg_bits --args=7,8
-python rv32im_sim.py --selftest                  # 驗證編碼器
+python rv32im_sim.py --selftest                     # 驗證編碼器
 ```
 
 `rv32im_sim.py` 會把 `.S` 組譯成真正的 RV32IM 機器碼再逐條執行，所以：
@@ -52,6 +54,29 @@ python rv32im_sim.py --selftest                  # 驗證編碼器
 - 指令數是**執行出來的**，不是數原始碼行數
 - 編碼寫錯會直接反映成錯誤結果（不是只影響計數）
 - 只支援 `test_avg.S` 用到的指令子集，不是完整的 RV32IM
+
+## 自訂指令（CP3）
+
+`test_avg_ci.S` 用同一組測資，但把 AVG 換成自訂指令：
+
+```asm
+        avg   t2, t0, t1        # rd = floor((rs1 + rs2) / 2)
+```
+
+| 項目 | baseline | 自訂指令 | 差異 |
+|---|---:|---:|---:|
+| 單次呼叫（含 `ret`） | 5 | 2 | −60% |
+| 每元素（迴圈） | 12 | 9 | −25% |
+| 16 元素迴圈（動態） | 194 | 146 | −24.7% |
+
+編碼：R-type，`opcode = 0001011`（custom-0）。
+`funct3` / `funct7` **由教師分配**，目前暫定 `000` / `0000000`，
+定義在 `rv32im_sim.py` 開頭的 `AVG_FUNCT3` / `AVG_FUNCT7`，改這兩行即可。
+
+```powershell
+python rv32im_sim.py test_avg_ci.S --run --report
+python rv32im_sim.py test_avg_ci.S --dump
+```
 
 ## 實驗室環境（有 `riscv64-elf-gcc` 時）
 

@@ -73,7 +73,21 @@ STORE_OPS = {"sb": 0, "sh": 1, "sw": 2}
 BRANCH_OPS = {"beq": 0, "bne": 1, "blt": 4, "bge": 5, "bltu": 6, "bgeu": 7}
 PSEUDO = {"li", "la", "mv", "nop", "ret", "j", "beqz", "bnez", "neg", "not", "call"}
 
+# ---------------------------------------------------------------------------
+# Custom instruction (HOMEWORK.md section 4: R-type, opcode = custom-0).
+# AVG is the only custom instruction in this project:
+#     avg rd, rs1, rs2      rd = floor((rs1 + rs2) / 2)   33-bit intermediate
+# funct3 / funct7 are assigned by the teacher; if the assigned values differ,
+# change these two constants and nothing else.
+# ---------------------------------------------------------------------------
+CUSTOM_OPCODE = 0x0B
+AVG_FUNCT3 = 0b000
+AVG_FUNCT7 = 0b0000000
+CUSTOM_MNEMONICS = {"avg": (AVG_FUNCT7, AVG_FUNCT3)}
+
 CATEGORY = {}
+for _m in CUSTOM_MNEMONICS:
+    CATEGORY[_m] = "custom"
 for _m in R_OPS:
     CATEGORY[_m] = "alu"
 for _m in I_OPS:
@@ -350,6 +364,11 @@ class Assembler:
                 f3 = 0 if m == "beqz" else 1
                 return [enc_b(offset, 0, rs, f3, 0x63)]
 
+            if m in CUSTOM_MNEMONICS:
+                f7, f3 = CUSTOM_MNEMONICS[m]
+                return [enc_r(f7, self._reg(ops[2]), self._reg(ops[1]), f3,
+                              self._reg(ops[0]), CUSTOM_OPCODE)]
+
             if m in R_OPS:
                 f7, f3 = R_OPS[m]
                 return [enc_r(f7, self._reg(ops[2]), self._reg(ops[1]), f3,
@@ -411,6 +430,8 @@ class Assembler:
     def assemble(self, extra_prefix: str = "") -> "Program":
         with open(self.path, "r", encoding="utf-8") as fh:
             lines = fh.readlines()
+        if lines:
+            lines[0] = lines[0].lstrip("\ufeff")  # tolerate a UTF-8 BOM
         if extra_prefix:
             lines = [line + "\n" for line in extra_prefix.splitlines()] + lines
         self.pass1(lines)
@@ -611,6 +632,14 @@ class Sim:
             wr(rd, (pc + (word & 0xFFFFF000)) & 0xFFFFFFFF)
         elif opcode == 0x0F:
             cat = "system"
+        elif opcode == CUSTOM_OPCODE:
+            cat = "custom"
+            if f3 == AVG_FUNCT3 and f7 == AVG_FUNCT7:
+                # floor((rs1 + rs2) / 2) with a 33-bit intermediate
+                wr(rd, (sext(a, 32) + sext(b, 32)) // 2)
+            else:
+                raise RuntimeError(
+                    f"unknown custom instruction f7={f7:#09b} f3={f3:#05b} at 0x{pc:x}")
         elif opcode == 0x73:
             cat = "system"
             self.exit_code = self.x[10]
@@ -648,6 +677,8 @@ def cat_of_word(word: int) -> str:
         return "jump"
     if op in (0x37, 0x17):
         return "upper"
+    if op == CUSTOM_OPCODE:
+        return "custom"
     return "system"
 
 
@@ -677,6 +708,7 @@ def summarise(prog: Program, sim: Sim) -> dict:
             "load": cats.get("load", 0),
             "store": cats.get("store", 0),
             "alu": cats.get("alu", 0) + cats.get("alu_imm", 0) + cats.get("shift", 0),
+            "custom": cats.get("custom", 0),
         })
     return {
         "funcs": funcs,
@@ -693,11 +725,12 @@ def print_report(info: dict, prog: Program, sim: Sim) -> None:
     print(f"dynamic instructions (whole run)  : {info['total_dynamic']}")
     print(f"exit code in a0 (ecall)           : {info['exit_code']}")
     print("-" * 78)
-    header = f"{'function':<12}{'static':>8}{'dynamic':>9}{'calls':>7}{'branch':>8}{'jump':>6}{'load':>6}{'store':>7}{'alu':>7}"
+    header = f"{'function':<12}{'static':>8}{'dynamic':>9}{'calls':>7}{'branch':>8}{'jump':>6}{'load':>6}{'store':>7}{'alu':>7}{'custom':>8}"
     print(header)
     for f in info["funcs"]:
         print(f"{f['name']:<12}{f['static']:>8}{f['dynamic']:>9}{f['calls']:>7}"
-              f"{f['branch']:>8}{f['jump']:>6}{f['load']:>6}{f['store']:>7}{f['alu']:>7}")
+              f"{f['branch']:>8}{f['jump']:>6}{f['load']:>6}{f['store']:>7}{f['alu']:>7}"
+              f"{f['custom']:>8}")
     print("-" * 78)
     print("register file (non zero):")
     for i in range(32):
@@ -714,15 +747,16 @@ def print_dump(prog: Program) -> None:
 
 
 def print_markdown(info: dict, prog: Program) -> None:
-    print("\n| function | static | calls | dynamic | branch | jump | load | store | ALU |")
-    print("|---|---:|---:|---:|---:|---:|---:|---:|---:|")
+    print("\n| function | static | calls | dynamic | branch | jump | load | store | ALU | custom |")
+    print("|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|")
     for f in info["funcs"]:
         print(f"| `{f['name']}` | {f['static']} | {f['calls']} | {f['dynamic']} | "
-              f"{f['branch']} | {f['jump']} | {f['load']} | {f['store']} | {f['alu']} |")
+              f"{f['branch']} | {f['jump']} | {f['load']} | {f['store']} | {f['alu']} | {f['custom']} |")
     print(f"| **total (.text)** | {info['total_static']} | | {info['total_dynamic']} | "
           f"{info['cats'].get('branch', 0)} | {info['cats'].get('jump', 0)} | "
           f"{info['cats'].get('load', 0)} | {info['cats'].get('store', 0)} | "
-          f"{sum(info['cats'].get(k, 0) for k in ('alu', 'alu_imm', 'shift'))} |")
+          f"{sum(info['cats'].get(k, 0) for k in ('alu', 'alu_imm', 'shift'))} | "
+          f"{info['cats'].get('custom', 0)} |")
 
 
 # --------------------------------------------------------------------------
@@ -739,6 +773,7 @@ def selftest() -> int:
         ("srai t1, t1, 1", 0x40135313),
         ("sltu t1, t0, a0", 0x00A2B333),
         ("lui a0, 1", 0x00001537),
+        ("avg a0, a0, a1", 0x00B5050B),
     ]
     failures = 0
     for text, expected in checks:
