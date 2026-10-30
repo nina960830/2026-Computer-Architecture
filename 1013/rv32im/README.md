@@ -69,9 +69,9 @@ python rv32im_sim.py --selftest                     # 驗證編碼器
 | 每元素（迴圈） | 12 | 9 | −25% |
 | 16 元素迴圈（動態） | 194 | 146 | −24.7% |
 
-編碼：R-type，`opcode = 0001011`（custom-0）。
-`funct3` / `funct7` **由教師分配**，目前暫定 `000` / `0000000`，
-定義在 `rv32im_sim.py` 開頭的 `AVG_FUNCT3` / `AVG_FUNCT7`，改這兩行即可。
+編碼：R-type，`opcode = 0001011`（custom-0），`funct3 = 000`、`funct7 = 0000000`
+（教師分配，已確認）。兩者以常數定義在 `rv32im_sim.py` 開頭的
+`AVG_FUNCT3` / `AVG_FUNCT7`。
 
 ```powershell
 python rv32im_sim.py test_avg_ci.S --run --report

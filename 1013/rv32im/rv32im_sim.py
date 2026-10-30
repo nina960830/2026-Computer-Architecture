@@ -77,8 +77,9 @@ PSEUDO = {"li", "la", "mv", "nop", "ret", "j", "beqz", "bnez", "neg", "not", "ca
 # Custom instruction (HOMEWORK.md section 4: R-type, opcode = custom-0).
 # AVG is the only custom instruction in this project:
 #     avg rd, rs1, rs2      rd = floor((rs1 + rs2) / 2)   33-bit intermediate
-# funct3 / funct7 are assigned by the teacher; if the assigned values differ,
-# change these two constants and nothing else.
+# funct3 / funct7 are assigned by the teacher.  AVG was assigned
+# funct3 = 000 and funct7 = 0000000 (all zero).  If that ever changes, edit
+# these two constants and nothing else.
 # ---------------------------------------------------------------------------
 CUSTOM_OPCODE = 0x0B
 AVG_FUNCT3 = 0b000
